@@ -1,3 +1,3 @@
 module.exports = {
-    PORT: 4044
+    PORT: 4044,
 };

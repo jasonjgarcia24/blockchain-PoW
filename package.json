@@ -5,6 +5,9 @@
   "license": "MIT",
   "dependencies": {
     "crypto-js": "^4.0.0",
-    "jayson": "^3.3.3"
+    "dotenv": "^14.2.0",
+    "elliptic": "^6.5.4",
+    "jayson": "^3.3.3",
+    "yargs": "^17.3.1"
   }
 }
