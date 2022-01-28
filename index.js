@@ -1,4 +1,4 @@
-const mine = require('./mine');
+const { startMining, stopMining } = require('./mine');
 const jayson = require('jayson')
 const { PORT } = require('./config')
 
@@ -7,6 +7,12 @@ const { PORT } = require('./config')
 const server = jayson.server({
     startMining: function (_, callback) {
         callback(null, 'success!');
+        startMining();
+    },
+
+    stopMining: function (_, callback) {
+        stopMining();
+        callback(null, 'stopped!')
     }
 });
 
