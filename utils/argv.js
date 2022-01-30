@@ -1,6 +1,6 @@
 function parseParameters(argv) {
     const myArgs = process.argv.slice(2);
-    let address = '';
+    let address = undefined;
 
     let i = 0;
     while (i < myArgs.length) {

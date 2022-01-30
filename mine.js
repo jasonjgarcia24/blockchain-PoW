@@ -1,13 +1,15 @@
 require('dotenv').config();
 
 const db = require('./db');
+const { genAccountFromPrivateKey } = require('./client/generate');
+const { getSignature } = require('./client/sign');
 const Block = require('./models/Block');
-const Transaction = require('./models/Transaction');
-const UTXO = require('./models/UTXO');
-const TARGET_DIFFICULTY = BigInt('0x00000' + 'f'.repeat(60));
+const { Transaction, CoinbaseTransaction } = require('./models/Transaction');
+const { InputUTXO, OutputUTXO } = require('./models/UTXO');
 
-const PUBLIC_KEY = process.env.PUBLIC_KEY;
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+// const PUBLIC_KEY = process.env.PUBLIC_KEY;
+const RECIPIENT_PRIVATE_KEY = process.env.PRIVATE_KEY_0;
+const SENDER_PRIVATE_KEY = process.env.PRIVATE_KEY_1;
 const BLOCK_REWARD = 10;
 
 
@@ -30,26 +32,45 @@ function stopMining() {
 function mine() {
     if (!mining) return;
 
+    const recipientKeyPair = genAccountFromPrivateKey(RECIPIENT_PRIVATE_KEY);
+    const recipientPublicKey = recipientKeyPair.getPublic().encode('hex').toString();
+
     const block = new Block();
 
     // TODO: add transactions from the mempool
 
-    const coinbaseUTXO = new UTXO(PUBLIC_KEY, BLOCK_REWARD);
-    const coinbaseTX = new Transaction([], [coinbaseUTXO]);
+    const [_, coinbaseUTXO] = createUTXO(BLOCK_REWARD);
+    console.log(coinbaseUTXO.scriptPubKey(
+        _.message,
+        _.signature,
+        recipientPublicKey,
+    ))
+
+    const coinbaseTX = new CoinbaseTransaction([coinbaseUTXO]);
+
     block.addTransaction(coinbaseTX);
 
-    while (BigInt('0x' + block.hash()) >= TARGET_DIFFICULTY) {
-        block.nonce++;
-    }
+    while (!block.getBlockValidation()) { block.updateNonce(); }
 
     block.execute();
-
-    console.log(block.transactions[0])
-
     db.blockchain.addBlock(block);
-    console.log(`Block: ${db.blockchain.blockHeight().toString().padStart(3, 0)} -- Hash: ${'0x' + block.hash()} -- Nonce: ${block.nonce}`);
+
+    console.log(`Block: ${db.blockchain.blockHeight().toString().padStart(3, 0)} -- Address: ${'0x' + block.address} -- Nonce: ${block.nonce}`);
 
     setTimeout(mine, 500);
+}
+
+function createUTXO(amount) {
+    const senderKeyPair = genAccountFromPrivateKey(SENDER_PRIVATE_KEY);
+    const recipientKeyPair = genAccountFromPrivateKey(RECIPIENT_PRIVATE_KEY);
+    const senderPublicKey = senderKeyPair.getPublic().encode('hex').toString();
+    const recipientPublicKey = recipientKeyPair.getPublic().encode('hex').toString();
+    const signatureObj = getSignature(RECIPIENT_PRIVATE_KEY, senderPublicKey, amount);
+
+    const inputUTXO = new InputUTXO(senderPublicKey, signatureObj.signature, signatureObj.message);
+    const outputUTXO = new OutputUTXO(recipientPublicKey, amount);
+
+    return [inputUTXO, outputUTXO];
 }
 
 module.exports = {

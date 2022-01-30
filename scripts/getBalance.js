@@ -4,7 +4,8 @@ const { parseParameters } = require('../utils/argv');
 
 const PUBLIC_KEY = process.env.PUBLIC_KEY;
 
-const [account] = parseParameters(process.argv);
+let [account] = parseParameters(process.argv);
+account = account ? account : PUBLIC_KEY;
 
 console.log(account);
 
