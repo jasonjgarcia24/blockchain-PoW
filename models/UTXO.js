@@ -2,8 +2,6 @@ const SHA256 = require('crypto-js/sha256');
 const { verifySignatureWithoutPrivateKey } = require('../server/verify')
 const { CURRENT_VERSION, RULES } = require('../rules');
 
-const FEE = RULES[CURRENT_VERSION].FEE;
-
 
 class UTXO {
     #owner;
@@ -11,7 +9,6 @@ class UTXO {
     constructor(owner) {
         this.#owner = SHA256(SHA256(owner)).toString();
         this.spent = false;
-
     }
 
     get owner() { return this.#owner; }
@@ -22,22 +19,27 @@ class InputUTXO extends UTXO {
     #message;
     #prevTxId;
     #prevTxOutputIndex;
+    #scriptSig;
 
-    constructor(owner, signature, message) {
-        super(owner);
+    constructor(recipient, signature, message, prevOutputTX) {
+        super(recipient);
         this.#signature = signature;
         this.#message = message;
-        this.#prevTxId = null;
-        this.#prevTxOutputIndex;
+        this.#prevTxId = '0x000';
+        this.#prevTxOutputIndex = 0;
+        this.#scriptSig = `${signature.r} ${signature.s} ${recipient} ${message}`
     }
 
-    get signature() { return this.#signature; }
     get message() { return this.#message; }
+    get prevTxId() { return this.#prevTxId; }
+    get prevTxOutputIndex() { return this.#prevTxOutputIndex; }
 
     get scriptSig() {
         /*
         * Unlocking Script
         *
+        *   Provided by the sender.
+        * 
         *   The scriptSig is contains the required signatures and the script which unlocks a
         *   UTXO for spending. A scriptSig pairs with the scriptPubKey (in OutputUTXO) to form
         *   a complete and valid script.
@@ -51,18 +53,21 @@ class InputUTXO extends UTXO {
         * 
         */
 
-        return `${this.#message} ${this.#signature.r} ${this.#signature.s} ${this.owner}`
+        return this.#scriptSig;
     }
 }
 
 class OutputUTXO extends UTXO {
+    #amount;
+
     constructor(owner, amount) {
         super(owner);
-        this.amount = amount;
-        this.fee = FEE;
+        this.#amount = amount;
     }
 
-    scriptPubKey(message, signature, recipientPubKey) {
+    get amount() { return this.#amount; }
+
+    scriptPubKey(recipientPubKey, scriptSig) {
         /*
         * Locking Script
         *   Inputs:
@@ -75,26 +80,35 @@ class OutputUTXO extends UTXO {
         *       public key is hashed and provided in the transaction.
         * 
         *   Outputs:
-        *       If (op_equalverify && op_checksig) === true, a scriptPubKey string will be returned.
+        *       If (equalverify && checksig) === true, a scriptPubKey string will be returned.
         *       Otherwise, an empty string will be returned. The scriptPubKey is defined in rules.js.
         *       Ex: `OP_DUP OP_HASH256 ${senderPubKeyHash} OP_EQUALVERIFY OP_CHECKSIG`.
         * 
         */
 
-        const op_dup = [recipientPubKey, recipientPubKey];
-        const op_hash = SHA256(SHA256(op_dup[1])).toString();
+        // PARSE SCRIPTSIG
+        const [rSignature, sSignature, owner, ...message] = scriptSig.split(' ');
+
+
+        const dup = [recipientPubKey, recipientPubKey];
+        const hash = SHA256(SHA256(dup[1])).toString();
 
         // SENDER VERIFICATION
         // For the recipient to receive the sent TKN, the recipient's hashed public key must
         // match the hashed public key sent from the sender.
-        const op_equalverify = op_hash === this.owner;
-        if (!op_equalverify) return '';
+        const equalverify = hash === this.owner;
+        if (!equalverify) return '';
 
         // RECIPIENT VERIFICATION
         // The recipient has to sign the transaction with their private key. The signed message
         // has to then be decrypted with the recipient's public key.
-        const op_checksig = verifySignatureWithoutPrivateKey(op_dup[0], signature, message);
-        return op_checksig ? RULES[CURRENT_VERSION].SCRIPT_PUB_KEY_FUNC(this.owner) : '';
+        const checksig = verifySignatureWithoutPrivateKey(
+            dup[0],
+            { r: rSignature, s: sSignature },
+            message.join(' ')
+        );
+
+        return checksig ? RULES[CURRENT_VERSION].SCRIPT_PUB_KEY_FUNC(owner) : '';
     }
 
 }

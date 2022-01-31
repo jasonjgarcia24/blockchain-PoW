@@ -1,23 +1,17 @@
 require('dotenv').config();
 
-const db = require('./db');
+const db = require('./server/db');
 const { genAccountFromPrivateKey } = require('./client/generate');
-const { getSignature } = require('./client/sign');
 const Block = require('./models/Block');
-const { Transaction, CoinbaseTransaction } = require('./models/Transaction');
-const { InputUTXO, OutputUTXO } = require('./models/UTXO');
-
-// const PUBLIC_KEY = process.env.PUBLIC_KEY;
-const RECIPIENT_PRIVATE_KEY = process.env.PRIVATE_KEY_0;
-const SENDER_PRIVATE_KEY = process.env.PRIVATE_KEY_1;
-const BLOCK_REWARD = 10;
+const Transaction = require('./models/Transaction');
+const Mempool = require('./models/mempool');
 
 
 let mining = true;
-mine();
+let mempool = new Mempool();
+startMining();
 
 function startMining() {
-    if (mining) return;
     mining = true;
     mine();
 }
@@ -25,6 +19,7 @@ function startMining() {
 function stopMining() {
     if (!mining) return;
     mining = false;
+    mempool = new Mempool();
     console.log('Mining stopped.');
 }
 
@@ -32,23 +27,22 @@ function stopMining() {
 function mine() {
     if (!mining) return;
 
-    const recipientKeyPair = genAccountFromPrivateKey(RECIPIENT_PRIVATE_KEY);
-    const recipientPublicKey = recipientKeyPair.getPublic().encode('hex').toString();
+    let tx;
 
-    const block = new Block();
+    while (mempool.transactions.length < 4) {
+        tx = new Transaction();
+        tx.append()
+        mempool.append(tx)
+    }
+    mempool.transactions.forEach(tx => {
+        tx.inputs.forEach(utxo => {
+            console.log(utxo.prevTxId)
+        })
+    })
 
-    // TODO: add transactions from the mempool
-
-    const [_, coinbaseUTXO] = createUTXO(BLOCK_REWARD);
-    console.log(coinbaseUTXO.scriptPubKey(
-        _.message,
-        _.signature,
-        recipientPublicKey,
-    ))
-
-    const coinbaseTX = new CoinbaseTransaction([coinbaseUTXO]);
-
-    block.addTransaction(coinbaseTX);
+    const block = new Block()
+    block.addTransaction(mempool.transactions);
+    mempool.splice(0, 4);
 
     while (!block.getBlockValidation()) { block.updateNonce(); }
 
@@ -58,19 +52,6 @@ function mine() {
     console.log(`Block: ${db.blockchain.blockHeight().toString().padStart(3, 0)} -- Address: ${'0x' + block.address} -- Nonce: ${block.nonce}`);
 
     setTimeout(mine, 500);
-}
-
-function createUTXO(amount) {
-    const senderKeyPair = genAccountFromPrivateKey(SENDER_PRIVATE_KEY);
-    const recipientKeyPair = genAccountFromPrivateKey(RECIPIENT_PRIVATE_KEY);
-    const senderPublicKey = senderKeyPair.getPublic().encode('hex').toString();
-    const recipientPublicKey = recipientKeyPair.getPublic().encode('hex').toString();
-    const signatureObj = getSignature(RECIPIENT_PRIVATE_KEY, senderPublicKey, amount);
-
-    const inputUTXO = new InputUTXO(senderPublicKey, signatureObj.signature, signatureObj.message);
-    const outputUTXO = new OutputUTXO(recipientPublicKey, amount);
-
-    return [inputUTXO, outputUTXO];
 }
 
 module.exports = {

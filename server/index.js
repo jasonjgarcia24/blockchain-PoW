@@ -1,7 +1,7 @@
-const { startMining, stopMining } = require('./mine');
+const { startMining, stopMining } = require('../mine');
 const jayson = require('jayson')
 const { utxos } = require('./db');
-const { PORT } = require('./config')
+const { PORT } = require('../config')
 
 
 // Create server

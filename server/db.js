@@ -1,4 +1,4 @@
-const Blockchain = require('./models/Blockchain');
+const Blockchain = require('../models/Blockchain');
 
 
 // Init blockchain
