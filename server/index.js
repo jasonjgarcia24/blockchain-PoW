@@ -17,9 +17,7 @@ const server = jayson.server({
     },
 
     getBalance: function ([address], callback) {
-        const ourUTXOs = utxos.filter(x => {
-            return x.owner === address && !x.spent;
-        });
+        const ourUTXOs = utxos.filter(x => x && x.owner === address && !x.spent);
         const sum = ourUTXOs.reduce((prev, curr) => prev + curr.amount, 0);
 
         callback(null, `Sum: ${sum}`);

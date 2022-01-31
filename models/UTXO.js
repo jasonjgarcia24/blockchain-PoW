@@ -89,7 +89,6 @@ class OutputUTXO extends UTXO {
         // PARSE SCRIPTSIG
         const [rSignature, sSignature, owner, ...message] = scriptSig.split(' ');
 
-
         const dup = [recipientPubKey, recipientPubKey];
         const hash = SHA256(SHA256(dup[1])).toString();
 
@@ -110,7 +109,6 @@ class OutputUTXO extends UTXO {
 
         return checksig ? RULES[CURRENT_VERSION].SCRIPT_PUB_KEY_FUNC(owner) : '';
     }
-
 }
 
 module.exports = { InputUTXO, OutputUTXO };

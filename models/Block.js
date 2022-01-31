@@ -47,12 +47,12 @@ class Block extends BlockHeader {
         // SHA256 does weird things with concat'd numbers.
         // Need to add '' at the front to "instruct" concatenation
         // to string.
-        return SHA256(
+        return SHA256(SHA256(
             '' +
             this.timestamp +
             this.nonce +
             JSON.stringify(this.#transactions)
-        ).toString();
+        )).toString();
     }
 
     get address() {

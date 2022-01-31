@@ -1,5 +1,6 @@
 require('dotenv').config({ path: '../.env' });
 
+const SHA256 = require('crypto-js/sha256');
 const { genAccountFromPrivateKey } = require('../client/generate');
 const { getSignature } = require('../client/sign');
 const { InputUTXO, OutputUTXO } = require('../models/UTXO');
@@ -32,10 +33,21 @@ class Transaction {
     get version() { return this.#version; }
     get vin_sz() { return this.#inputs.length; }
     get vout_sz() { return this.#outputs.length; }
-    get lock_time() { return this.#lockTime; }
+    get lockTime() { return this.#lockTime; }
     get inputs() { return this.#inputs; }
     get outputs() { return this.#outputs; }
     get fee() { return this.#fee; }
+
+    get hash() {
+        return SHA256(SHA256(
+            '' +
+            this.#version +
+            this.#lockTime +
+            this.#inputs +
+            this.#outputs +
+            this.#fee
+        )).toString();
+    }
 
     append() {
         let balance = 30;
