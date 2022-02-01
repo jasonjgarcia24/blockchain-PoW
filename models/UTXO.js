@@ -18,21 +18,21 @@ class InputUTXO extends UTXO {
     #signature;
     #message;
     #prevTxId;
-    #prevTxOutputIndex;
+    #prevOutputUTXOIndex;
     #scriptSig;
 
-    constructor(recipient, signature, message, prevOutputTX) {
+    constructor(recipient, signature, message, prevTxId, prevOutputUTXOIndex) {
         super(recipient);
         this.#signature = signature;
         this.#message = message;
-        this.#prevTxId = '0x000';
-        this.#prevTxOutputIndex = 0;
-        this.#scriptSig = `${signature.r} ${signature.s} ${recipient} ${message}`
+        this.#prevTxId = prevTxId;
+        this.#prevOutputUTXOIndex = prevOutputUTXOIndex;
+        this.#scriptSig = `${signature.r} ${signature.s} ${recipient} ${message}`;
+        this.unsafeScriptSig = this.#scriptSig;
     }
 
-    get message() { return this.#message; }
     get prevTxId() { return this.#prevTxId; }
-    get prevTxOutputIndex() { return this.#prevTxOutputIndex; }
+    get prevOutputUTXOIndex() { return this.#prevOutputUTXOIndex; }
 
     get scriptSig() {
         /*
@@ -59,15 +59,22 @@ class InputUTXO extends UTXO {
 
 class OutputUTXO extends UTXO {
     #amount;
+    #signature;
+    #message;
 
-    constructor(owner, amount) {
+    constructor(owner, amount, signature, message) {
         super(owner);
         this.#amount = amount;
+        this.#signature = signature;
+        this.#message = message;
+        this.unsafeMessage = message;
     }
 
     get amount() { return this.#amount; }
+    get signature() { return this.#signature; }
+    get message() { return this.#message; }
 
-    scriptPubKey(recipientPubKey, scriptSig) {
+    scriptPubKey(recipientPubKey, signature, message) {
         /*
         * Locking Script
         *   Inputs:
@@ -86,9 +93,6 @@ class OutputUTXO extends UTXO {
         * 
         */
 
-        // PARSE SCRIPTSIG
-        const [rSignature, sSignature, owner, ...message] = scriptSig.split(' ');
-
         const dup = [recipientPubKey, recipientPubKey];
         const hash = SHA256(SHA256(dup[1])).toString();
 
@@ -101,13 +105,9 @@ class OutputUTXO extends UTXO {
         // RECIPIENT VERIFICATION
         // The recipient has to sign the transaction with their private key. The signed message
         // has to then be decrypted with the recipient's public key.
-        const checksig = verifySignatureWithoutPrivateKey(
-            dup[0],
-            { r: rSignature, s: sSignature },
-            message.join(' ')
-        );
+        const checksig = verifySignatureWithoutPrivateKey(dup[0], signature, message);
 
-        return checksig ? RULES[CURRENT_VERSION].SCRIPT_PUB_KEY_FUNC(owner) : '';
+        return checksig ? RULES[CURRENT_VERSION].SCRIPT_PUB_KEY_FUNC(this.owner) : '';
     }
 }
 

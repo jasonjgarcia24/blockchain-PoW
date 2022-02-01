@@ -10,6 +10,10 @@ class Blockchain {
     blockHeight() {
         return this.blocks.length;
     }
+
+    findTransaction(hash) {
+        
+    }
 }
 
 module.exports = Blockchain;

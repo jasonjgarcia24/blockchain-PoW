@@ -1,14 +1,10 @@
 require('dotenv').config({ path: '../.env' });
 
 const SHA256 = require('crypto-js/sha256');
-const { genAccountFromPrivateKey } = require('../client/generate');
-const { getSignature } = require('../client/sign');
+const db = require('../server/db');
 const { InputUTXO, OutputUTXO } = require('../models/UTXO');
 const { CURRENT_VERSION, RULES } = require('../rules');
-const { utxos } = require("../server/db");
 
-const RECIPIENT_PRIVATE_KEY = process.env.PRIVATE_KEY_0;
-const SENDER_PRIVATE_KEY = process.env.PRIVATE_KEY_1;
 const PUBLIC_KEY_MINER = process.env.PUBLIC_KEY_MINER;
 const BLOCK_REWARD = RULES[CURRENT_VERSION].BLOCK_REWARD;
 const FEE = RULES[CURRENT_VERSION].FEE;
@@ -43,40 +39,93 @@ class Transaction {
             '' +
             this.#version +
             this.#lockTime +
-            this.#inputs +
-            this.#outputs +
+            JSON.stringify(this.#inputs) +
+            JSON.stringify(this.#outputs) +
             this.#fee
         )).toString();
     }
 
-    append() {
-        let balance = 30;
+    append(sender, recipient, balance, signature, message, prevTxId, prevOutputUTXOIndex) {
         balance -= FEE;
 
-        // Additional UTXO transactions    
-        const recipientKeyPair = genAccountFromPrivateKey(RECIPIENT_PRIVATE_KEY);
-        const recipientPublicKey = recipientKeyPair.getPublic().encode('hex').toString();
+        if (!this.verifySender(sender, prevTxId, prevOutputUTXOIndex)) return;
 
         // Coinbase UTXO
-        this.#appendOutputUTXO(BLOCK_REWARD, PUBLIC_KEY_MINER);
+        this.#appendOutputUTXO(
+            PUBLIC_KEY_MINER,
+            BLOCK_REWARD,
+            undefined,
+            undefined,
+        );
         balance -= BLOCK_REWARD;
 
-        this.#appendInputUTXO('0x0000');
-        this.#appendOutputUTXO(balance, recipientPublicKey);
+        // Sender/Recipient UTXOs
+        this.#appendInputUTXO(
+            sender,
+            signature,
+            message,
+            prevTxId,
+            prevOutputUTXOIndex,
+        );
+
+        this.#appendOutputUTXO(
+            recipient,
+            balance,
+            signature,
+            message,
+        );
+
+        prevOutputUTXOIndex = this.#outputs.length;
     }
 
-    #appendInputUTXO(prevTxId) {
-        const senderKeyPair = genAccountFromPrivateKey(SENDER_PRIVATE_KEY);
-        const senderPublicKey = senderKeyPair.getPublic().encode('hex').toString();
-        const signatureObj = getSignature(RECIPIENT_PRIVATE_KEY, senderPublicKey, prevTxId);
+    verifySender(sender, prevTxId, prevOutputUTXOIndex) {
+        // Verify sender has access to funds
+        let isVerified;
+        let utxo;
 
-        const inputUTXO = new InputUTXO(senderPublicKey, signatureObj.signature, signatureObj.message);
+        if (db.blockchain.blocks.length) {
+            let prevOutputTx;
+            db.blockchain.blocks.forEach((block) => {
+                prevOutputTx = block.transactions.filter(transaction => transaction.hash === prevTxId)[0]
+            })
+
+            utxo = prevOutputTx.outputs[prevOutputUTXOIndex];
+            isVerified = utxo.scriptPubKey(sender, utxo.signature, utxo.message);
+            if (isVerified) console.log(isVerified);
+        }
+        else {
+            isVerified = true;
+        }
+
+        return (isVerified) ? true : false;
+    }
+
+    verifyBalance() {
+        
+    }
+
+    #appendInputUTXO(sender, signature, message, prevTxId, prevOutputUTXOIndex) {
+        // Create Input UTXO
+        const inputUTXO = new InputUTXO(
+            sender,
+            signature,
+            message,
+            prevTxId,
+            prevOutputUTXOIndex
+        );
+
+        // const [rSignature, sSignature, owner, ...message] = inputUTXO.scriptSig.split(' ');
 
         this.#inputs.push(inputUTXO);
     }
 
-    #appendOutputUTXO(amount, recipientPublicKey) {
-        const outputUTXO = new OutputUTXO(recipientPublicKey, amount);
+    #appendOutputUTXO(recipientPublicKey, amount, signature, message) {
+        const outputUTXO = new OutputUTXO(
+            recipientPublicKey,
+            amount,
+            signature,
+            message
+        );
 
         this.#outputs.push(outputUTXO);
     }
@@ -84,10 +133,6 @@ class Transaction {
     execute() {
         this.#inputs.forEach((input) => {
             input.spent = true;
-        });
-
-        this.#outputs.forEach((output) => {
-            utxos.push(output);
         });
     }
 }
